@@ -63,55 +63,60 @@ async function handleInteraction(client, interaction) {
 
     // Giveaway join: giveaway_join_<id>
     if (customId.startsWith('giveaway_join_')) {
+      await interaction.deferUpdate();
+
       const gId = parseInt(customId.split('_')[2]);
       const gData = db.prepare('SELECT * FROM giveaways WHERE id = ?').get(gId);
 
       if (!gData || gData.ended) {
-        return interaction.reply({ ...v2([container([text('❌ Этот розыгрыш уже завершён.')])], true) });
+        await interaction.followUp({ ...v2([container([text('❌ Этот розыгрыш уже завершён.')])], true) });
+        return;
       }
 
       const existing = db.prepare('SELECT 1 FROM giveaway_participants WHERE giveaway_id = ? AND user_id = ?').get(gId, interaction.user.id);
 
       if (existing) {
         db.prepare('DELETE FROM giveaway_participants WHERE giveaway_id = ? AND user_id = ?').run(gId, interaction.user.id);
-        await interaction.reply({
+        await interaction.followUp({
           ...v2([container([
             text('### Регистрация отменена\n-# Вы вышли из розыгрыша. Нажмите кнопку снова, чтобы участвовать.'),
           ])], true),
         });
       } else {
         db.prepare('INSERT OR IGNORE INTO giveaway_participants (giveaway_id, user_id) VALUES (?, ?)').run(gId, interaction.user.id);
-        await interaction.reply({
+        await interaction.followUp({
           ...v2([container([
             text('### Вы успешно зарегистрировались на розыгрыш!!!\n-# Чтобы отменить регистрацию, кликните на кнопку повторно'),
           ])], true),
         });
       }
 
-      // Update button count in the giveaway message
       const count = db.prepare('SELECT COUNT(*) as cnt FROM giveaway_participants WHERE giveaway_id = ?').get(gId);
       const participantCount = count ? Number(count.cnt) : 0;
       const components = buildGiveawayComponents(gData, participantCount);
-
       await interaction.message.edit({ flags: IS_V2, components }).catch(() => {});
       return;
     }
 
     // Giveaway members: giveaway_members_<id>
     if (customId.startsWith('giveaway_members_')) {
+      await interaction.deferUpdate();
+
       const gId = parseInt(customId.split('_')[2]);
       const participants = db.prepare('SELECT user_id FROM giveaway_participants WHERE giveaway_id = ?').all(gId);
 
       if (!participants.length) {
-        return interaction.reply({ ...v2([container([text('*Участников пока нет*')])], true) });
+        await interaction.followUp({ ...v2([container([text('*Участников пока нет*')])], true) });
+        return;
       }
 
       const lines = participants.map((p, i) => `${i + 1}. <@${p.user_id}>`).join('\n');
-      return interaction.reply({
+      await interaction.followUp({
         ...v2([container([
           text(`### Участники розыгрыша (${participants.length})\n${lines}`),
         ])], true),
       });
+      return;
     }
 
     // Card reply button: card_reply_<senderId>_<recipientId>
