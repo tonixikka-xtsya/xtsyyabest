@@ -1,0 +1,13 @@
+{
+  "name": "@workspace/bot",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.18.0",
+    "express": "^4.21.2"
+  }
+}
