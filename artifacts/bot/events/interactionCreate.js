@@ -1,9 +1,11 @@
 const { container, text, separator, actionRow, button, customEmoji, v2, IS_V2 } = require('../utils/components');
-const { getCase, updateCase } = require('../database');
+const { db, getCase, updateCase } = require('../database');
 const { parseDuration, formatDuration } = require('../utils/duration');
 const { buildLogComponents, buildDmComponents } = require('../prefix/mute');
 const { buildBanLogComponents, buildBanDmComponents } = require('../prefix/ban');
 const { PUNISHMENT_ROLE } = require('../utils/hierarchy');
+const { buildLbPage, navButtons } = require('../prefix/lb');
+const { buildGiveawayComponents } = require('../commands/giveaway');
 
 const slashCommands = require('../commands/index');
 const commandMap = {};
@@ -20,6 +22,97 @@ async function handleInteraction(client, interaction) {
   // Button interactions
   if (interaction.isButton()) {
     const { customId } = interaction;
+
+    // Leaderboard navigation: lb_<action>_<userId>_<page>
+    if (customId.startsWith('lb_')) {
+      const parts = customId.split('_');
+      const action = parts[1]; // dback, back, next, dnext
+      const callerId = parts[2];
+      const currentPage = parseInt(parts[3]);
+
+      if (interaction.user.id !== callerId) {
+        return interaction.reply({ ...v2([container([text('❌ Только тот, кто вызвал команду, может использовать эти кнопки.')])], true) });
+      }
+
+      const delta = { dback: -3, back: -1, next: 1, dnext: 3 }[action] ?? 0;
+      const newPage = currentPage + delta;
+
+      await interaction.guild.members.fetch().catch(() => {});
+      const { items, totalPages, safePage } = await buildLbPage(interaction.guild, newPage);
+
+      const components = [
+        container([
+          text(`### Топ рейтинга участников (Страница ${safePage + 1}/${totalPages})`),
+          separator(),
+          ...items,
+          separator(),
+          text(
+            `<:dback:1485286050665599086> — возвращение на 3 страницы назад\n` +
+            `<:back:1485285989999185958> — вернуться на прошлую страницу\n` +
+            `<:nexttt:1484292444756512948> — перелистнуть на страницу вперёд\n` +
+            `<:dnexttt:1484292483331526816> — перелистнуть на 3 страницы вперёд`
+          ),
+          separator(),
+          navButtons(callerId, safePage, totalPages),
+        ]),
+      ];
+
+      await interaction.update({ flags: IS_V2, components });
+      return;
+    }
+
+    // Giveaway join: giveaway_join_<id>
+    if (customId.startsWith('giveaway_join_')) {
+      const gId = parseInt(customId.split('_')[2]);
+      const gData = db.prepare('SELECT * FROM giveaways WHERE id = ?').get(gId);
+
+      if (!gData || gData.ended) {
+        return interaction.reply({ ...v2([container([text('❌ Этот розыгрыш уже завершён.')])], true) });
+      }
+
+      const existing = db.prepare('SELECT 1 FROM giveaway_participants WHERE giveaway_id = ? AND user_id = ?').get(gId, interaction.user.id);
+
+      if (existing) {
+        db.prepare('DELETE FROM giveaway_participants WHERE giveaway_id = ? AND user_id = ?').run(gId, interaction.user.id);
+        await interaction.reply({
+          ...v2([container([
+            text('### Регистрация отменена\n-# Вы вышли из розыгрыша. Нажмите кнопку снова, чтобы участвовать.'),
+          ])], true),
+        });
+      } else {
+        db.prepare('INSERT OR IGNORE INTO giveaway_participants (giveaway_id, user_id) VALUES (?, ?)').run(gId, interaction.user.id);
+        await interaction.reply({
+          ...v2([container([
+            text('### Вы успешно зарегистрировались на розыгрыш!!!\n-# Чтобы отменить регистрацию, кликните на кнопку повторно'),
+          ])], true),
+        });
+      }
+
+      // Update button count in the giveaway message
+      const count = db.prepare('SELECT COUNT(*) as cnt FROM giveaway_participants WHERE giveaway_id = ?').get(gId);
+      const participantCount = count ? Number(count.cnt) : 0;
+      const components = buildGiveawayComponents(gData, participantCount);
+
+      await interaction.message.edit({ flags: IS_V2, components }).catch(() => {});
+      return;
+    }
+
+    // Giveaway members: giveaway_members_<id>
+    if (customId.startsWith('giveaway_members_')) {
+      const gId = parseInt(customId.split('_')[2]);
+      const participants = db.prepare('SELECT user_id FROM giveaway_participants WHERE giveaway_id = ?').all(gId);
+
+      if (!participants.length) {
+        return interaction.reply({ ...v2([container([text('*Участников пока нет*')])], true) });
+      }
+
+      const lines = participants.map((p, i) => `${i + 1}. <@${p.user_id}>`).join('\n');
+      return interaction.reply({
+        ...v2([container([
+          text(`### Участники розыгрыша (${participants.length})\n${lines}`),
+        ])], true),
+      });
+    }
 
     // Card reply button: card_reply_<senderId>_<recipientId>
     if (customId.startsWith('card_reply_')) {
@@ -53,7 +146,7 @@ async function handleInteraction(client, interaction) {
     // Moderation buttons: mod_reason_<id>, mod_time_<id>, mod_remove_<id>
     if (customId.startsWith('mod_reason_') || customId.startsWith('mod_time_') || customId.startsWith('mod_remove_')) {
       const parts = customId.split('_');
-      const action = parts[1]; // reason, time, remove
+      const action = parts[1];
       const caseId = parseInt(parts[2]);
       const caseData = getCase(caseId);
 
@@ -116,7 +209,6 @@ async function handleInteraction(client, interaction) {
   if (interaction.isModalSubmit()) {
     const { customId } = interaction;
 
-    // Card reply modal
     if (customId.startsWith('card_modal_reply_')) {
       const senderId = customId.split('_')[3];
       const replyText = interaction.fields.getTextInputValue('reply_text');
@@ -145,7 +237,6 @@ async function handleInteraction(client, interaction) {
       return;
     }
 
-    // Change reason modal
     if (customId.startsWith('mod_modal_reason_')) {
       const caseId = parseInt(customId.split('_')[3]);
       const newReason = interaction.fields.getTextInputValue('new_reason');
@@ -157,7 +248,6 @@ async function handleInteraction(client, interaction) {
       return interaction.reply({ ...v2([container([text(`✅ Причина обновлена: **${newReason}**`)])], true) });
     }
 
-    // Change time modal
     if (customId.startsWith('mod_modal_time_')) {
       const caseId = parseInt(customId.split('_')[3]);
       const newTimeStr = interaction.fields.getTextInputValue('new_time');
@@ -209,7 +299,6 @@ async function updateModMessages(client, guild, caseData, disabled = false) {
   const isMute = caseData.type === 'mute';
   const status = caseData.status === 'closed' ? 'Закрыт' : 'Активен';
 
-  // Update log message
   if (caseData.log_message_id && caseData.log_channel_id) {
     try {
       const g = guild || (await client.guilds.fetch(caseData.guild_id).catch(() => null));
@@ -230,7 +319,6 @@ async function updateModMessages(client, guild, caseData, disabled = false) {
     } catch {}
   }
 
-  // Update DM message
   if (caseData.dm_message_id && caseData.dm_channel_id) {
     try {
       const modUser = await client.users.fetch(caseData.moderator_id).catch(() => null);

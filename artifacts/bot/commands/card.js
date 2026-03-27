@@ -38,7 +38,7 @@ async function execute(client, interaction) {
         button(`card_reply_${interaction.user.id}_${recipient.id}`, {
           emoji: customEmoji('1486723667789353103', 'respohe', true),
           label: 'Ответить',
-          style: 1,
+          style: 2,
         }),
       ]),
     ]),
@@ -50,12 +50,9 @@ async function execute(client, interaction) {
   }
 
   try {
-    const recipientMember = await interaction.guild?.members.fetch(recipient.id).catch(() => null);
-    if (recipientMember) {
-      const dmChannel = await recipient.createDM().catch(() => null);
-      if (dmChannel) {
-        await dmChannel.send({ flags: IS_V2, components: cardComponents });
-      }
+    const dmChannel = await recipient.createDM().catch(() => null);
+    if (dmChannel) {
+      await dmChannel.send({ flags: IS_V2, components: cardComponents });
     }
   } catch {}
 

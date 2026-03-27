@@ -1,4 +1,4 @@
-const IS_V2 = 1 << 15; // 32768
+const IS_V2 = 1 << 15;
 
 function container(components, accentColor = null) {
   const c = { type: 17, components };
@@ -14,6 +14,24 @@ function separator(spacing = 1, divider = true) {
   return { type: 14, spacing, divider };
 }
 
+function section(textContent, thumbnailUrl = null) {
+  const s = {
+    type: 9,
+    components: [{ type: 10, content: textContent }],
+  };
+  if (thumbnailUrl) {
+    s.accessory = { type: 11, media: { url: thumbnailUrl } };
+  }
+  return s;
+}
+
+function mediaGallery(items) {
+  return {
+    type: 12,
+    items: items.map(url => ({ media: { url } })),
+  };
+}
+
 function actionRow(components) {
   return { type: 1, components };
 }
@@ -24,7 +42,7 @@ function button(customId, opts = {}) {
     style: opts.style !== undefined ? opts.style : 2,
     custom_id: customId,
   };
-  if (opts.label) btn.label = opts.label;
+  if (opts.label !== undefined) btn.label = opts.label;
   if (opts.emoji) btn.emoji = opts.emoji;
   if (opts.disabled) btn.disabled = true;
   return btn;
@@ -39,4 +57,4 @@ function v2(components, ephemeral = false) {
   return { flags, components: Array.isArray(components) ? components : [components] };
 }
 
-module.exports = { container, text, separator, actionRow, button, customEmoji, v2, IS_V2 };
+module.exports = { container, text, separator, section, mediaGallery, actionRow, button, customEmoji, v2, IS_V2 };

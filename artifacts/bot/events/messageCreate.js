@@ -6,6 +6,9 @@ const XP_COOLDOWN = 60_000;
 const XP_MIN = 10;
 const XP_MAX = 25;
 
+const XP_CHANNEL = '1403785454595084349';
+const LEVEL_UP_CHANNEL = '1474652431601242112';
+
 const BONUS_ROLE_HALF = '1458850005153742993';
 const BONUS_ROLE_FULL_A = '1467228617334587536';
 const BONUS_ROLE_FULL_B = '1467063042431778869';
@@ -20,39 +23,58 @@ const prefixCommands = {
   rank: require('../prefix/rank'),
   exp: require('../prefix/exp'),
   lvl: require('../prefix/lvl'),
+  '2x': require('../prefix/2x'),
+  '2xoff': require('../prefix/2xoff'),
+  lb: require('../prefix/lb'),
 };
 
 async function handleMessageCreate(client, message) {
   if (message.author.bot || !message.guild) return;
 
-  // XP from messages
-  const user = getOrCreateUser(message.author.id, message.guild.id);
-  const now = Date.now();
+  // XP only in the designated channel
+  if (message.channel.id === XP_CHANNEL) {
+    const user = getOrCreateUser(message.author.id, message.guild.id);
+    const now = Date.now();
 
-  if (!user.xp_cooldown || now - user.xp_cooldown >= XP_COOLDOWN) {
-    const member = message.member;
-    let multiplier = 1.0;
-    if (member?.roles.cache.has(BONUS_ROLE_FULL_A) || member?.roles.cache.has(BONUS_ROLE_FULL_B)) {
-      multiplier = 2.5;
-    } else if (member?.roles.cache.has(BONUS_ROLE_HALF)) {
-      multiplier = 1.5;
+    if (!user.xp_cooldown || now - Number(user.xp_cooldown) >= XP_COOLDOWN) {
+      const member = message.member;
+      let multiplier = 1.0;
+      if (member?.roles.cache.has(BONUS_ROLE_FULL_A) || member?.roles.cache.has(BONUS_ROLE_FULL_B)) {
+        multiplier = 2.5;
+      } else if (member?.roles.cache.has(BONUS_ROLE_HALF)) {
+        multiplier = 1.5;
+      }
+
+      const { isDoubleXp } = require('../utils/state');
+      if (isDoubleXp()) multiplier *= 2;
+
+      const xpGain = Math.floor((Math.random() * (XP_MAX - XP_MIN + 1) + XP_MIN) * multiplier);
+      const beforeLevel = getLevelFromXp(Number(user.xp));
+      const updated = addXp(message.author.id, message.guild.id, xpGain);
+      const afterLevel = getLevelFromXp(Number(updated.xp));
+
+      if (afterLevel > beforeLevel) {
+        const { container, text, separator, IS_V2 } = require('../utils/components');
+        const levelUpChannel = message.guild.channels.cache.get(LEVEL_UP_CHANNEL);
+        const target = levelUpChannel || message.channel;
+        const now_ts = Math.floor(Date.now() / 1000);
+        await target.send({
+          flags: IS_V2,
+          components: [
+            container([
+              text(
+                `### Уровень повышен!\n` +
+                `**Поздравляю с повышением уровня <@${message.author.id}>. Ты достиг **${afterLevel}** ур. Продолжай дальше трудиться и активить на XTSYYA`
+              ),
+              separator(),
+              text(`-# ● <t:${now_ts}:f>`),
+            ]),
+          ],
+        }).catch(() => {});
+      }
+
+      require('../database').db.prepare('UPDATE users SET xp_cooldown = ? WHERE user_id = ? AND guild_id = ?').run(now, message.author.id, message.guild.id);
     }
-
-    const xpGain = Math.floor((Math.random() * (XP_MAX - XP_MIN + 1) + XP_MIN) * multiplier);
-    const beforeLevel = getLevelFromXp(user.xp);
-    const updated = addXp(message.author.id, message.guild.id, xpGain);
-    const afterLevel = getLevelFromXp(updated.xp);
-
-    if (afterLevel > beforeLevel) {
-      const { container, text, IS_V2 } = require('../utils/components');
-      await message.channel.send({
-        content: `<@${message.author.id}>`,
-        flags: IS_V2,
-        components: [container([text(`🎉 Поздравляем! Вы достигли **${afterLevel}** уровня!`)])],
-      }).catch(() => {});
-    }
-
-    require('../database').db.prepare('UPDATE users SET xp_cooldown = ? WHERE user_id = ? AND guild_id = ?').run(now, message.author.id, message.guild.id);
   }
 
   if (!message.content.startsWith(PREFIX)) return;

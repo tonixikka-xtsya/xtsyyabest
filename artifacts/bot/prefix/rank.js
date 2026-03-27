@@ -1,4 +1,4 @@
-const { container, text, separator, IS_V2 } = require('../utils/components');
+const { container, text, separator, section, IS_V2 } = require('../utils/components');
 const { getOrCreateUser, getVoiceForDate, getVoiceSince } = require('../database');
 const { getLevelFromXp, xpInCurrentLevel, xpNeededForCurrentLevel, num } = require('../utils/xp');
 const { formatSeconds } = require('../utils/duration');
@@ -8,8 +8,8 @@ const BONUS_ROLE_FULL_A = '1467228617334587536';
 const BONUS_ROLE_FULL_B = '1467063042431778869';
 
 async function execute(client, message, args) {
-  const targetUser = message.mentions.members.first() || message.member;
-  const userData = getOrCreateUser(targetUser.id, message.guild.id);
+  const targetMember = message.mentions.members.first() || message.member;
+  const userData = getOrCreateUser(targetMember.id, message.guild.id);
 
   const level = getLevelFromXp(userData.xp);
   const currentLevelXp = xpInCurrentLevel(userData.xp);
@@ -17,9 +17,9 @@ async function execute(client, message, args) {
   const remaining = neededXp - currentLevelXp;
 
   let bonus = 0.0;
-  if (targetUser.roles.cache.has(BONUS_ROLE_FULL_A) || targetUser.roles.cache.has(BONUS_ROLE_FULL_B)) {
+  if (targetMember.roles.cache.has(BONUS_ROLE_FULL_A) || targetMember.roles.cache.has(BONUS_ROLE_FULL_B)) {
     bonus = 1.5;
-  } else if (targetUser.roles.cache.has(BONUS_ROLE_HALF)) {
+  } else if (targetMember.roles.cache.has(BONUS_ROLE_HALF)) {
     bonus = 0.5;
   }
 
@@ -28,19 +28,22 @@ async function execute(client, message, args) {
   const sixDaysAgo = new Date(now.getTime() - 6 * 24 * 3600 * 1000);
   const sixDaysAgoStr = sixDaysAgo.toISOString().split('T')[0];
 
-  const voiceToday = getVoiceForDate(targetUser.id, message.guild.id, todayStr);
-  const voiceWeek = getVoiceSince(targetUser.id, message.guild.id, sixDaysAgoStr);
+  const voiceToday = getVoiceForDate(targetMember.id, message.guild.id, todayStr);
+  const voiceWeek = getVoiceSince(targetMember.id, message.guild.id, sixDaysAgoStr);
   const voiceTotal = userData.voice_total || 0;
 
-  const todayTs = Math.floor(now.setHours(0, 0, 0, 0) / 1000);
-  const sixDaysTs = Math.floor(sixDaysAgo.setHours(0, 0, 0, 0) / 1000);
+  const todayTs = Math.floor(new Date(todayStr).getTime() / 1000);
+  const sixDaysTs = Math.floor(new Date(sixDaysAgoStr).getTime() / 1000);
+
+  const avatarUrl = targetMember.displayAvatarURL({ size: 256, extension: 'png' });
 
   const components = [
     container([
-      text(
-        `## ${targetUser.displayName} — Профиль\n` +
-        `<a:grownwh:1481735043150778480> **ID :** \`${targetUser.id}\`\n` +
-        `<a:grownwh:1481735043150778480> **REP :** \`${userData.rep_received}\``
+      section(
+        `## ${targetMember.displayName} — Профиль\n` +
+        `<a:grownwh:1481735043150778480> **ID :** \`${targetMember.id}\`\n` +
+        `<a:grownwh:1481735043150778480> **REP :** \`${userData.rep_received}\``,
+        avatarUrl
       ),
       separator(),
       text(

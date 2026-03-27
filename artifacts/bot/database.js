@@ -53,6 +53,26 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS birthday_awards (
     award_key TEXT PRIMARY KEY
   );
+  CREATE TABLE IF NOT EXISTS giveaways (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT,
+    item TEXT NOT NULL,
+    description TEXT NOT NULL,
+    organizer_id TEXT NOT NULL,
+    organizer_name TEXT NOT NULL,
+    winner_count INTEGER DEFAULT 1,
+    image_url TEXT,
+    start_time INTEGER NOT NULL,
+    end_time INTEGER NOT NULL,
+    ended INTEGER DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS giveaway_participants (
+    giveaway_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    PRIMARY KEY (giveaway_id, user_id)
+  );
 `);
 
 function getOrCreateUser(userId, guildId) {

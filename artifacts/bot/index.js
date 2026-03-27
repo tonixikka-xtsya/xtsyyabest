@@ -5,7 +5,7 @@ const { handleMessageDelete } = require('./events/messageDelete');
 const { handleMessageUpdate } = require('./events/messageUpdate');
 const { handleVoiceStateUpdate } = require('./events/voiceStateUpdate');
 const { handleInteraction } = require('./events/interactionCreate');
-const { db, getOrCreateUser, getActiveSessions, startVoiceSession } = require('./database');
+const { db, startVoiceSession } = require('./database');
 
 keepAlive();
 
@@ -28,6 +28,7 @@ client.once('ready', async () => {
   startBirthdayChecker();
   startCaseExpiryChecker();
   syncVoiceSessions();
+  await resumeGiveaways();
 });
 
 client.on('messageCreate', msg => handleMessageCreate(client, msg).catch(console.error));
@@ -39,6 +40,12 @@ client.on('voiceStateUpdate', (o, n) => handleVoiceStateUpdate(client, o, n).cat
 async function registerSlashCommands() {
   const commands = require('./commands/index');
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+  // Clear global commands to prevent duplicates
+  try {
+    await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
+  } catch {}
+
   for (const [, guild] of client.guilds.cache) {
     try {
       await rest.put(
@@ -50,6 +57,23 @@ async function registerSlashCommands() {
       console.error(`Failed to register commands for ${guild.id}:`, e.message);
     }
   }
+}
+
+// Resume active giveaways after bot restart
+async function resumeGiveaways() {
+  const { scheduleGiveaway } = require('./commands/giveaway');
+  const active = db.prepare('SELECT * FROM giveaways WHERE ended = 0').all();
+  const now = Date.now();
+  for (const g of active) {
+    const remaining = Number(g.end_time) - now;
+    if (remaining <= 0) {
+      const { endGiveaway } = require('./commands/giveaway');
+      await endGiveaway(client, g.id).catch(() => {});
+    } else {
+      scheduleGiveaway(client, Number(g.id), remaining);
+    }
+  }
+  console.log(`Resumed ${active.length} active giveaway(s)`);
 }
 
 // Sync voice sessions on startup (in case bot was restarted)
@@ -115,7 +139,6 @@ function startBirthdayChecker() {
 
           db.prepare('INSERT OR IGNORE INTO birthday_awards (award_key) VALUES (?)').run(awardKey);
 
-          // Remove role at end of day
           const endOfDay = new Date();
           endOfDay.setHours(23, 59, 59, 999);
           const ms = endOfDay.getTime() - Date.now();
@@ -153,7 +176,6 @@ function startCaseExpiryChecker() {
 
         db.prepare("UPDATE cases SET status = 'expired' WHERE id = ?").run(c.id);
 
-        // Update DM message to show Закрыт with disabled buttons
         if (c.dm_message_id && c.dm_channel_id) {
           const modUser = await client.users.fetch(c.moderator_id).catch(() => null);
           if (modUser) {
