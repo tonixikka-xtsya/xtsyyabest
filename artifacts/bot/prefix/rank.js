@@ -50,7 +50,7 @@ async function execute(client, message, args) {
         `## Уровень\n` +
         `<a:grownwh:1481735043150778480> **${level}** ур. **${num(currentLevelXp)}** из **${num(neededXp)}** exp.\n` +
         `<a:grownwh:1481735043150778480> **${num(remaining)}** exp. осталось до нового уровня\n` +
-        `<a:grownwh:1481735043150778480> **Бонусный опыт:** +${bonus.toFixed(1)}`
+        `<a:grownwh:1481735043150778480> **Бонусный опыт :** +${bonus.toFixed(1)}`
       ),
       separator(),
       text(

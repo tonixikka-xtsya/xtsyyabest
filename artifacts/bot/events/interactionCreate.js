@@ -4,7 +4,7 @@ const { parseDuration, formatDuration } = require('../utils/duration');
 const { buildLogComponents, buildDmComponents } = require('../prefix/mute');
 const { buildBanLogComponents, buildBanDmComponents } = require('../prefix/ban');
 const { PUNISHMENT_ROLE } = require('../utils/hierarchy');
-const { buildLbPage, navButtons } = require('../prefix/lb');
+const { buildLbPage, navButtons, buildComponents: buildLbComponents } = require('../prefix/lb');
 const { buildGiveawayComponents } = require('../commands/giveaway');
 
 const slashCommands = require('../commands/index');
@@ -34,30 +34,16 @@ async function handleInteraction(client, interaction) {
         return interaction.reply({ ...v2([container([text('❌ Только тот, кто вызвал команду, может использовать эти кнопки.')])], true) });
       }
 
+      await interaction.deferUpdate();
+
       const delta = { dback: -3, back: -1, next: 1, dnext: 3 }[action] ?? 0;
       const newPage = currentPage + delta;
 
       await interaction.guild.members.fetch().catch(() => {});
       const { items, totalPages, safePage } = await buildLbPage(interaction.guild, newPage);
+      const components = buildLbComponents(callerId, items, safePage, totalPages);
 
-      const components = [
-        container([
-          text(`### Топ рейтинга участников (Страница ${safePage + 1}/${totalPages})`),
-          separator(),
-          ...items,
-          separator(),
-          text(
-            `<:dback:1485286050665599086> — возвращение на 3 страницы назад\n` +
-            `<:back:1485285989999185958> — вернуться на прошлую страницу\n` +
-            `<:nexttt:1484292444756512948> — перелистнуть на страницу вперёд\n` +
-            `<:dnexttt:1484292483331526816> — перелистнуть на 3 страницы вперёд`
-          ),
-          separator(),
-          navButtons(callerId, safePage, totalPages),
-        ]),
-      ];
-
-      await interaction.update({ flags: IS_V2, components });
+      await interaction.message.edit({ flags: IS_V2, components });
       return;
     }
 

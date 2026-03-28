@@ -23,7 +23,6 @@ async function buildLbPage(guild, page) {
   for (const u of allUsers) {
     const member = guild.members.cache.get(u.user_id);
     if (member) filtered.push({ user: u, member });
-    if (filtered.length >= (page + 1) * PAGE_SIZE + 10) break;
   }
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -34,9 +33,9 @@ async function buildLbPage(guild, page) {
   for (let i = 0; i < slice.length; i++) {
     const { user, member } = slice[i];
     const globalIndex = safePage * PAGE_SIZE + i;
-    const level = getLevelFromXp(user.xp);
-    const curXp = xpInCurrentLevel(user.xp);
-    const neededXp = xpNeededForCurrentLevel(user.xp);
+    const level = getLevelFromXp(Number(user.xp));
+    const curXp = xpInCurrentLevel(Number(user.xp));
+    const neededXp = xpNeededForCurrentLevel(Number(user.xp));
     const remaining = neededXp - curXp;
     const voiceTotal = Number(user.voice_total) || 0;
 
@@ -69,30 +68,25 @@ function navButtons(callerId, page, totalPages) {
   ]);
 }
 
-async function execute(client, message, args) {
-  await message.guild.members.fetch().catch(() => {});
-
-  const page = 0;
-  const { items, totalPages, safePage } = await buildLbPage(message.guild, page);
-
-  const components = [
+function buildComponents(callerId, items, safePage, totalPages) {
+  return [
     container([
       text(`### Топ рейтинга участников (Страница ${safePage + 1}/${totalPages})`),
       separator(),
       ...items,
       separator(),
-      text(
-        `<:dback:1485286050665599086> — возвращение на 3 страницы назад\n` +
-        `<:back:1485285989999185958> — вернуться на прошлую страницу\n` +
-        `<:nexttt:1484292444756512948> — перелистнуть на страницу вперёд\n` +
-        `<:dnexttt:1484292483331526816> — перелистнуть на 3 страницы вперёд`
-      ),
-      separator(),
-      navButtons(message.author.id, safePage, totalPages),
+      navButtons(callerId, safePage, totalPages),
     ]),
   ];
+}
+
+async function execute(client, message, args) {
+  await message.guild.members.fetch().catch(() => {});
+
+  const { items, totalPages, safePage } = await buildLbPage(message.guild, 0);
+  const components = buildComponents(message.author.id, items, safePage, totalPages);
 
   await message.channel.send({ flags: IS_V2, components });
 }
 
-module.exports = { execute, buildLbPage, navButtons };
+module.exports = { execute, buildLbPage, navButtons, buildComponents };
