@@ -1,11 +1,19 @@
 const { container, text, separator, actionRow, button, customEmoji, v2, IS_V2 } = require('../utils/components');
-const { db, getCase, updateCase } = require('../database');
+const { db, getCase, updateCase, getMarriage, createMarriage, deleteMarriage, getChildren, addChild, isAlreadyChild } = require('../database');
 const { parseDuration, formatDuration } = require('../utils/duration');
 const { buildLogComponents, buildDmComponents } = require('../prefix/mute');
 const { buildBanLogComponents, buildBanDmComponents } = require('../prefix/ban');
 const { PUNISHMENT_ROLE } = require('../utils/hierarchy');
 const { buildLbPage, navButtons, buildComponents: buildLbComponents } = require('../prefix/lb');
 const { buildGiveawayComponents } = require('../commands/giveaway');
+const { buildMsgPage, buildMsgComponents } = require('../commands/msgcount');
+const { buildLoveLbPage, buildLoveLbComponents } = require('../prefix/lovelb');
+
+const LOVE_ROLES = {
+  1: '1488588731874148422', 2: '1488588784965648655', 3: '1488588845262962799',
+  4: '1488588894055436412', 5: '1488588948937900283', 6: '1488588997683974225',
+  7: '1488589051081789450',
+};
 
 const slashCommands = require('../commands/index');
 const commandMap = {};
@@ -26,7 +34,7 @@ async function handleInteraction(client, interaction) {
     // Leaderboard navigation: lb_<action>_<userId>_<page>
     if (customId.startsWith('lb_')) {
       const parts = customId.split('_');
-      const action = parts[1]; // dback, back, next, dnext
+      const action = parts[1];
       const callerId = parts[2];
       const currentPage = parseInt(parts[3]);
 
@@ -42,6 +50,54 @@ async function handleInteraction(client, interaction) {
       await interaction.guild.members.fetch().catch(() => {});
       const { items, totalPages, safePage } = await buildLbPage(interaction.guild, newPage);
       const components = buildLbComponents(callerId, items, safePage, totalPages);
+
+      await interaction.message.edit({ flags: IS_V2, components });
+      return;
+    }
+
+    // Msgcount navigation: mc_<action>_<userId>_<page>
+    if (customId.startsWith('mc_')) {
+      const parts = customId.split('_');
+      const action = parts[1];
+      const callerId = parts[2];
+      const currentPage = parseInt(parts[3]);
+
+      if (interaction.user.id !== callerId) {
+        return interaction.reply({ ...v2([container([text('❌ Только тот, кто вызвал команду, может использовать эти кнопки.')])], true) });
+      }
+
+      await interaction.deferUpdate();
+
+      const delta = { dback: -3, back: -1, next: 1, dnext: 3 }[action] ?? 0;
+      const newPage = currentPage + delta;
+
+      await interaction.guild.members.fetch().catch(() => {});
+      const { items, totalPages, safePage } = await buildMsgPage(interaction.guild, newPage);
+      const components = buildMsgComponents(callerId, items, safePage, totalPages);
+
+      await interaction.message.edit({ flags: IS_V2, components });
+      return;
+    }
+
+    // Love leaderboard navigation: lovelb_<action>_<userId>_<page>
+    if (customId.startsWith('lovelb_')) {
+      const parts = customId.split('_');
+      const action = parts[1];
+      const callerId = parts[2];
+      const currentPage = parseInt(parts[3]);
+
+      if (interaction.user.id !== callerId) {
+        return interaction.reply({ ...v2([container([text('❌ Только тот, кто вызвал команду, может использовать эти кнопки.')])], true) });
+      }
+
+      await interaction.deferUpdate();
+
+      const delta = { dback: -3, back: -1, next: 1, dnext: 3 }[action] ?? 0;
+      const newPage = currentPage + delta;
+
+      await interaction.guild.members.fetch().catch(() => {});
+      const { items, totalPages, safePage } = await buildLoveLbPage(interaction.guild, newPage);
+      const components = buildLoveLbComponents(callerId, items, safePage, totalPages);
 
       await interaction.message.edit({ flags: IS_V2, components });
       return;
@@ -102,6 +158,103 @@ async function handleInteraction(client, interaction) {
           text(`### Участники розыгрыша (${participants.length})\n${lines}`),
         ])], true),
       });
+      return;
+    }
+
+    // Marriage proposal: marry_accept_<proposerId>_<targetId> / marry_reject_<...>
+    if (customId.startsWith('marry_accept_') || customId.startsWith('marry_reject_')) {
+      const parts = customId.split('_');
+      const isAccept = parts[1] === 'accept';
+      const proposerId = parts[2];
+      const targetId = parts[3];
+
+      if (interaction.user.id !== targetId) {
+        return interaction.reply({ ...v2([container([text('❌ Только адресат предложения может принять или отклонить его.')])], true) });
+      }
+
+      if (!isAccept) {
+        await interaction.deferUpdate();
+        await interaction.message.edit({
+          flags: IS_V2,
+          components: [container([
+            text(`💔 <@${targetId}> отклонил предложение <@${proposerId}>.`),
+          ])],
+        }).catch(() => {});
+        return;
+      }
+
+      // Check both are still not married
+      const existingA = getMarriage(interaction.guild.id, proposerId);
+      const existingB = getMarriage(interaction.guild.id, targetId);
+      if (existingA || existingB) {
+        return interaction.reply({ ...v2([container([text('❌ Один из участников уже состоит в браке.')])], true) });
+      }
+
+      const marriageId = createMarriage({
+        guild_id: interaction.guild.id,
+        user1_id: proposerId,
+        user2_id: targetId,
+        proposer_id: proposerId,
+        married_at: Date.now(),
+      });
+
+      // Assign love level 1 role to both
+      const loveRole1 = LOVE_ROLES[1];
+      for (const uid of [proposerId, targetId]) {
+        const m = interaction.guild.members.cache.get(uid) || await interaction.guild.members.fetch(uid).catch(() => null);
+        if (m && loveRole1) await m.roles.add(loveRole1).catch(() => {});
+      }
+
+      await interaction.deferUpdate();
+      await interaction.message.edit({
+        flags: IS_V2,
+        components: [container([
+          text(`💕 **<@${proposerId}> и <@${targetId}> теперь в браке!** *Поздравляем молодожёнов!*`),
+        ])],
+      }).catch(() => {});
+      return;
+    }
+
+    // Child adoption: child_accept_<marriageId>_<childId>_<role> / child_reject_<...>
+    if (customId.startsWith('child_accept_') || customId.startsWith('child_reject_')) {
+      const parts = customId.split('_');
+      const isAccept = parts[1] === 'accept';
+      const marriageIdStr = parts[2];
+      const childId = parts[3];
+      const role = parts[4]; // 'son' or 'daughter'
+
+      if (interaction.user.id !== childId) {
+        return interaction.reply({ ...v2([container([text('❌ Только адресат предложения может принять или отклонить его.')])], true) });
+      }
+
+      if (!isAccept) {
+        await interaction.deferUpdate();
+        await interaction.message.edit({
+          flags: IS_V2,
+          components: [container([text(`<@${childId}> отклонил предложение о вступлении в семью.`)])],
+        }).catch(() => {});
+        return;
+      }
+
+      const marriageId = parseInt(marriageIdStr);
+      const marriage = db.prepare('SELECT * FROM marriages WHERE id = ?').get(marriageId);
+      if (!marriage) {
+        return interaction.reply({ ...v2([container([text('❌ Семья не найдена. Возможно, брак был расторгнут.')])], true) });
+      }
+      if (isAlreadyChild(childId, interaction.guild.id)) {
+        return interaction.reply({ ...v2([container([text('❌ Вы уже состоите в другой семье.')])], true) });
+      }
+
+      addChild(marriageId, childId, interaction.guild.id, role);
+
+      const roleWord = role === 'son' ? 'сын' : 'дочь';
+      await interaction.deferUpdate();
+      await interaction.message.edit({
+        flags: IS_V2,
+        components: [container([
+          text(`✅ <@${childId}> принял(а) предложение и стал(а) ${roleWord === 'сын' ? '**сыном**' : '**дочерью**'} пары <@${marriage.user1_id}> + <@${marriage.user2_id}>!`),
+        ])],
+      }).catch(() => {});
       return;
     }
 

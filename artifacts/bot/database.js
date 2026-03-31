@@ -73,8 +73,39 @@ db.exec(`
     user_id TEXT NOT NULL,
     PRIMARY KEY (giveaway_id, user_id)
   );
+  CREATE TABLE IF NOT EXISTS message_counts (
+    user_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    count INTEGER DEFAULT 0,
+    PRIMARY KEY (user_id, guild_id)
+  );
+  CREATE TABLE IF NOT EXISTS marriages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    user1_id TEXT NOT NULL,
+    user2_id TEXT NOT NULL,
+    proposer_id TEXT NOT NULL,
+    married_at INTEGER NOT NULL,
+    love_xp INTEGER DEFAULT 0,
+    love_streak_count INTEGER DEFAULT 0,
+    last_love_at INTEGER DEFAULT 0,
+    love_streak_day TEXT DEFAULT '',
+    voice_together INTEGER DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS children (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    marriage_id INTEGER NOT NULL,
+    child_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    role TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS voice_together_sessions (
+    marriage_id INTEGER NOT NULL PRIMARY KEY,
+    start_time INTEGER NOT NULL
+  );
 `);
 
+// ─── Users ───────────────────────────────────────────────────────────────────
 function getOrCreateUser(userId, guildId) {
   db.prepare('INSERT OR IGNORE INTO users (user_id, guild_id) VALUES (?, ?)').run(userId, guildId);
   return db.prepare('SELECT * FROM users WHERE user_id = ? AND guild_id = ?').get(userId, guildId);
@@ -92,6 +123,7 @@ function setXp(userId, guildId, xp) {
   return db.prepare('SELECT * FROM users WHERE user_id = ? AND guild_id = ?').get(userId, guildId);
 }
 
+// ─── Cases ───────────────────────────────────────────────────────────────────
 function createCase(data) {
   const result = db.prepare(`
     INSERT INTO cases (guild_id, type, moderator_id, target_id, reason, duration, expires_at, created_at, status)
@@ -115,6 +147,7 @@ function updateCase(id, data) {
   db.prepare(`UPDATE cases SET ${sets} WHERE id = ?`).run(...Object.values(data), id);
 }
 
+// ─── Rep ─────────────────────────────────────────────────────────────────────
 function hasGivenRep(giverId, receiverId, guildId) {
   return !!db.prepare('SELECT 1 FROM rep WHERE giver_id = ? AND receiver_id = ? AND guild_id = ?').get(giverId, receiverId, guildId);
 }
@@ -125,6 +158,7 @@ function addRep(giverId, receiverId, guildId) {
   db.prepare('UPDATE users SET rep_received = rep_received + 1 WHERE user_id = ? AND guild_id = ?').run(receiverId, guildId);
 }
 
+// ─── Voice Sessions ───────────────────────────────────────────────────────────
 function startVoiceSession(userId, guildId) {
   db.prepare('INSERT OR REPLACE INTO voice_sessions (user_id, guild_id, join_time) VALUES (?, ?, ?)').run(userId, guildId, Date.now());
 }
@@ -158,10 +192,76 @@ function getVoiceSince(userId, guildId, dateStr) {
   return row?.total ? Number(row.total) : 0;
 }
 
+// ─── Message Counts ───────────────────────────────────────────────────────────
+function incrementMessageCount(userId, guildId) {
+  db.prepare('INSERT INTO message_counts (user_id, guild_id, count) VALUES (?, ?, 1) ON CONFLICT(user_id, guild_id) DO UPDATE SET count = count + 1').run(userId, guildId);
+}
+
+function getMessageLeaderboard(guildId) {
+  return db.prepare('SELECT * FROM message_counts WHERE guild_id = ? ORDER BY count DESC').all(guildId);
+}
+
+// ─── Marriages ───────────────────────────────────────────────────────────────
+function getMarriage(guildId, userId) {
+  return db.prepare('SELECT * FROM marriages WHERE guild_id = ? AND (user1_id = ? OR user2_id = ?)').get(guildId, userId, userId) ?? null;
+}
+
+function createMarriage(data) {
+  const result = db.prepare(`
+    INSERT INTO marriages (guild_id, user1_id, user2_id, proposer_id, married_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(data.guild_id, data.user1_id, data.user2_id, data.proposer_id, data.married_at);
+  return Number(result.lastInsertRowid);
+}
+
+function updateMarriage(id, data) {
+  const keys = Object.keys(data);
+  if (!keys.length) return;
+  const sets = keys.map(k => `${k} = ?`).join(', ');
+  db.prepare(`UPDATE marriages SET ${sets} WHERE id = ?`).run(...Object.values(data), id);
+}
+
+function deleteMarriage(id) {
+  db.prepare('DELETE FROM children WHERE marriage_id = ?').run(id);
+  db.prepare('DELETE FROM voice_together_sessions WHERE marriage_id = ?').run(id);
+  db.prepare('DELETE FROM marriages WHERE id = ?').run(id);
+}
+
+function getChildren(marriageId) {
+  return db.prepare('SELECT * FROM children WHERE marriage_id = ?').all(marriageId);
+}
+
+function addChild(marriageId, childId, guildId, role) {
+  db.prepare('INSERT INTO children (marriage_id, child_id, guild_id, role) VALUES (?, ?, ?, ?)').run(marriageId, childId, guildId, role);
+}
+
+function isAlreadyChild(childId, guildId) {
+  return !!db.prepare('SELECT 1 FROM children WHERE child_id = ? AND guild_id = ?').get(childId, guildId);
+}
+
+// ─── Voice Together ───────────────────────────────────────────────────────────
+function startVoiceTogether(marriageId) {
+  db.prepare('INSERT OR REPLACE INTO voice_together_sessions (marriage_id, start_time) VALUES (?, ?)').run(marriageId, Date.now());
+}
+
+function endVoiceTogether(marriageId) {
+  const session = db.prepare('SELECT * FROM voice_together_sessions WHERE marriage_id = ?').get(marriageId);
+  if (!session) return 0;
+  const duration = Math.floor((Date.now() - Number(session.start_time)) / 1000);
+  db.prepare('DELETE FROM voice_together_sessions WHERE marriage_id = ?').run(marriageId);
+  if (duration <= 0) return 0;
+  db.prepare('UPDATE marriages SET voice_together = voice_together + ? WHERE id = ?').run(duration, marriageId);
+  return duration;
+}
+
 module.exports = {
   db,
   getOrCreateUser, addXp, setXp,
   createCase, getCase, getCaseByTarget, updateCase,
   hasGivenRep, addRep,
   startVoiceSession, endVoiceSession, getVoiceForDate, getVoiceSince,
+  incrementMessageCount, getMessageLeaderboard,
+  getMarriage, createMarriage, updateMarriage, deleteMarriage,
+  getChildren, addChild, isAlreadyChild,
+  startVoiceTogether, endVoiceTogether,
 };

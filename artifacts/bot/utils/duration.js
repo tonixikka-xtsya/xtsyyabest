@@ -1,10 +1,9 @@
 function parseDuration(str) {
   if (!str) return null;
-  const regex = /(\d+)\s*(s|sec|m|min|мин|ч|h|d|д|д\.|w|нед)/gi;
-  let total = 0;
-  let match;
   const copy = str.toLowerCase();
   const r = /(\d+)\s*(s|sec|m|min|мин|ч|h|d|д|w|нед)/gi;
+  let total = 0;
+  let match;
   while ((match = r.exec(copy)) !== null) {
     const num = parseInt(match[1]);
     const unit = match[2];
@@ -33,10 +32,19 @@ function formatDuration(ms) {
 }
 
 function formatSeconds(secs) {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  if (h === 0) return `${m} минут`;
-  return `${h} часов ${m} минут`;
+  const n = Number(secs) || 0;
+  const days = Math.floor(n / 86400);
+  const hours = Math.floor((n % 86400) / 3600);
+  const mins = Math.floor((n % 3600) / 60);
+  const parts = [];
+  if (days) parts.push(`${days} д.`);
+  if (hours) parts.push(`${hours} ч.`);
+  if (!days) parts.push(`${mins} мин.`);
+  return parts.join(' ') || '0 мин.';
 }
 
-module.exports = { parseDuration, formatDuration, formatSeconds };
+function formatMs(ms) {
+  return formatSeconds(Math.floor((Number(ms) || 0) / 1000));
+}
+
+module.exports = { parseDuration, formatDuration, formatSeconds, formatMs };

@@ -1,4 +1,4 @@
-const { addXp, getOrCreateUser } = require('../database');
+const { addXp, getOrCreateUser, incrementMessageCount } = require('../database');
 const { getLevelFromXp } = require('../utils/xp');
 
 const PREFIX = '?';
@@ -7,11 +7,32 @@ const XP_MIN = 10;
 const XP_MAX = 25;
 
 const XP_CHANNEL = '1403785454595084349';
-const LEVEL_UP_CHANNEL = '1474652431601242112';
 
 const BONUS_ROLE_HALF = '1458850005153742993';
 const BONUS_ROLE_FULL_A = '1467228617334587536';
 const BONUS_ROLE_FULL_B = '1467063042431778869';
+
+const LEVEL_ROLES = [
+  { level: 5,   roleId: '1488582043632795838' },
+  { level: 10,  roleId: '1404881427245563904' },
+  { level: 20,  roleId: '1404881104758112298' },
+  { level: 25,  roleId: '1404880719469350945' },
+  { level: 40,  roleId: '1404880308603719711' },
+  { level: 50,  roleId: '1404878540775620649' },
+  { level: 75,  roleId: '1404878088369606666' },
+  { level: 80,  roleId: '1404877963417227346' },
+  { level: 85,  roleId: '1404877497924845590' },
+  { level: 95,  roleId: '1404877687201333298' },
+  { level: 100, roleId: '1404877101378699265' },
+];
+
+function getLevelRole(level) {
+  let role = null;
+  for (const lr of LEVEL_ROLES) {
+    if (level >= lr.level) role = lr.roleId;
+  }
+  return role;
+}
 
 const prefixCommands = {
   mute: require('../prefix/mute'),
@@ -26,12 +47,23 @@ const prefixCommands = {
   '2x': require('../prefix/2x'),
   '2xoff': require('../prefix/2xoff'),
   lb: require('../prefix/lb'),
+  marry: require('../prefix/marry'),
+  family: require('../prefix/family'),
+  divorce: require('../prefix/divorce'),
+  son: require('../prefix/son'),
+  daughter: require('../prefix/daughter'),
+  love: require('../prefix/love'),
+  loverank: require('../prefix/loverank'),
+  lovelb: require('../prefix/lovelb'),
 };
 
 async function handleMessageCreate(client, message) {
   if (message.author.bot || !message.guild) return;
 
-  // XP only in the designated channel
+  // Track message count for all messages
+  incrementMessageCount(message.author.id, message.guild.id);
+
+  // XP only in designated channel
   if (message.channel.id === XP_CHANNEL) {
     const user = getOrCreateUser(message.author.id, message.guild.id);
     const now = Date.now();
@@ -53,24 +85,13 @@ async function handleMessageCreate(client, message) {
       const updated = addXp(message.author.id, message.guild.id, xpGain);
       const afterLevel = getLevelFromXp(Number(updated.xp));
 
-      if (afterLevel > beforeLevel) {
-        const { container, text, separator, IS_V2 } = require('../utils/components');
-        const levelUpChannel = message.guild.channels.cache.get(LEVEL_UP_CHANNEL);
-        const target = levelUpChannel || message.channel;
-        const now_ts = Math.floor(Date.now() / 1000);
-        await target.send({
-          flags: IS_V2,
-          components: [
-            container([
-              text(
-                `### Уровень повышен!\n` +
-                `**Поздравляю с повышением уровня <@${message.author.id}>. Ты достиг **${afterLevel}** ур. Продолжай дальше трудиться и активить на XTSYYA`
-              ),
-              separator(),
-              text(`-# ● <t:${now_ts}:f>`),
-            ]),
-          ],
-        }).catch(() => {});
+      if (afterLevel > beforeLevel && member) {
+        const newRole = getLevelRole(afterLevel);
+        const oldRole = getLevelRole(beforeLevel);
+        if (newRole && newRole !== oldRole) {
+          if (oldRole) await member.roles.remove(oldRole).catch(() => {});
+          await member.roles.add(newRole).catch(() => {});
+        }
       }
 
       require('../database').db.prepare('UPDATE users SET xp_cooldown = ? WHERE user_id = ? AND guild_id = ?').run(now, message.author.id, message.guild.id);

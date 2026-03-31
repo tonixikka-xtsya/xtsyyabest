@@ -5,7 +5,7 @@ const { handleMessageDelete } = require('./events/messageDelete');
 const { handleMessageUpdate } = require('./events/messageUpdate');
 const { handleVoiceStateUpdate } = require('./events/voiceStateUpdate');
 const { handleInteraction } = require('./events/interactionCreate');
-const { db, startVoiceSession } = require('./database');
+const { db, startVoiceSession, getMarriage, deleteMarriage } = require('./database');
 
 keepAlive();
 
@@ -36,6 +36,25 @@ client.on('messageDelete', msg => handleMessageDelete(client, msg).catch(console
 client.on('messageUpdate', (o, n) => handleMessageUpdate(client, o, n).catch(console.error));
 client.on('interactionCreate', i => handleInteraction(client, i).catch(console.error));
 client.on('voiceStateUpdate', (o, n) => handleVoiceStateUpdate(client, o, n).catch(console.error));
+
+// Auto-divorce when member leaves the server
+client.on('guildMemberRemove', async (member) => {
+  try {
+    const marriage = getMarriage(member.guild.id, member.id);
+    if (!marriage) return;
+
+    const partnerId = marriage.user1_id === member.id ? marriage.user2_id : marriage.user1_id;
+    deleteMarriage(marriage.id);
+
+    const LOVE_ROLES = ['1488588731874148422','1488588784965648655','1488588845262962799','1488588894055436412','1488588948937900283','1488588997683974225','1488589051081789450'];
+    const partnerMember = member.guild.members.cache.get(partnerId);
+    if (partnerMember) {
+      for (const rId of LOVE_ROLES) {
+        await partnerMember.roles.remove(rId).catch(() => {});
+      }
+    }
+  } catch {}
+});
 
 async function registerSlashCommands() {
   const commands = require('./commands/index');
