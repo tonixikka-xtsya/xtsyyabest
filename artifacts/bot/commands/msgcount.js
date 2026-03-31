@@ -28,11 +28,10 @@ async function buildMsgPage(guild, page) {
     const { row, member } = slice[i];
     const globalIndex = safePage * PAGE_SIZE + i;
     items.push(text(
-      `<a:grownwh:1481735043150778480> *${placeStr(globalIndex)}* ${member.displayName}\n` +
-      `<a:grownwh:1481735043150778480> *${num(Number(row.count))}* сообщений\n` +
-      `<a:grownwh:1481735043150778480>`
+      `*{#${globalIndex + 1}}* **— ${member.displayName}**\n` +
+      `<a:grownwh:1481735043150778480> **${num(Number(row.count))}** *сообщений*`
     ));
-    if (i < slice.length - 1) items.push(separator());
+    items.push(separator());
   }
 
   if (!items.length) items.push(text('*Нет данных*'));
@@ -46,7 +45,6 @@ function buildMsgComponents(callerId, items, safePage, totalPages) {
       text(`### Количество сообщений (Страница ${safePage + 1}/${totalPages})`),
       separator(),
       ...items,
-      separator(),
       actionRow([
         button(`mc_dback_${callerId}_${safePage}`, { emoji: customEmoji('1485286050665599086', 'dback'), style: 2, disabled: dis(-3) }),
         button(`mc_back_${callerId}_${safePage}`, { emoji: customEmoji('1485285989999185958', 'back'), style: 2, disabled: dis(-1) }),
