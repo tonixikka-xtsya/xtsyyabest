@@ -8,7 +8,7 @@ const data = {
   name: 'reroll',
   description: 'Перевыбрать победителя розыгрыша',
   options: [
-    { type: 4, name: 'розыгрыш', description: 'ID розыгрыша', required: true, min_value: 1 },
+    { type: 3, name: 'розыгрыш', description: 'ID розыгрыша или ID сообщения', required: true },
     { type: 4, name: 'победители', description: 'Количество победителей (по умолчанию как в исходном)', required: false, min_value: 1 },
     { type: 6, name: 'исключить', description: 'Юзер, которого исключить из реролла', required: false },
   ],
@@ -20,19 +20,19 @@ async function execute(client, interaction) {
     return interaction.reply({ ...v2([container([text('❌ У вас нет прав для управления розыгрышами.')])], true) });
   }
 
-  const gId = interaction.options.getInteger('розыгрыш');
+  const gInput = interaction.options.getString('розыгрыш');
   const winnerCount = interaction.options.getInteger('победители') ?? null;
   const excludeUser = interaction.options.getUser('исключить');
-  const gData = db.prepare('SELECT * FROM giveaways WHERE id = ?').get(gId);
+  const gData = db.prepare('SELECT * FROM giveaways WHERE id = ? OR message_id = ?').get(gInput, gInput);
 
   if (!gData) {
-    return interaction.reply({ ...v2([container([text(`❌ Розыгрыш #${gId} не найден.`)])], true) });
+    return interaction.reply({ ...v2([container([text(`❌ Розыгрыш не найден.`)])], true) });
   }
   if (!gData.ended) {
     return interaction.reply({ ...v2([container([text('❌ Розыгрыш ещё не завершён.')])], true) });
   }
 
-  const participants = db.prepare('SELECT user_id FROM giveaway_participants WHERE giveaway_id = ?').all(gId);
+  const participants = db.prepare('SELECT user_id FROM giveaway_participants WHERE giveaway_id = ?').all(gData.id);
   if (!participants.length) {
     return interaction.reply({ ...v2([container([text('❌ Нет участников для перевыбора.')])], true) });
   }
@@ -66,7 +66,7 @@ async function execute(client, interaction) {
     await interaction.reply({
       flags: IS_V2,
       components: [container([
-        text(`🎉 Реролл розыгрыша **${gData.item}** (#${gId})${excludeStr}\nНовый победитель${winners.length > 1 ? 'и' : ''}: ${winStr}`),
+        text(`🎉 Реролл розыгрыша **${gData.item}** (#${gData.id})${excludeStr}\nНовый победитель${winners.length > 1 ? 'и' : ''}: ${winStr}`),
       ])],
     });
   } catch (e) {
