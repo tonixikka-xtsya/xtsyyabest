@@ -10,6 +10,7 @@ const data = {
   options: [
     { type: 4, name: 'розыгрыш', description: 'ID розыгрыша', required: true, min_value: 1 },
     { type: 4, name: 'победители', description: 'Количество победителей (по умолчанию как в исходном)', required: false, min_value: 1 },
+    { type: 6, name: 'исключить', description: 'Юзер, которого исключить из реролла', required: false },
   ],
 };
 
@@ -21,6 +22,7 @@ async function execute(client, interaction) {
 
   const gId = interaction.options.getInteger('розыгрыш');
   const winnerCount = interaction.options.getInteger('победители') ?? null;
+  const excludeUser = interaction.options.getUser('исключить');
   const gData = db.prepare('SELECT * FROM giveaways WHERE id = ?').get(gId);
 
   if (!gData) {
@@ -35,9 +37,17 @@ async function execute(client, interaction) {
     return interaction.reply({ ...v2([container([text('❌ Нет участников для перевыбора.')])], true) });
   }
 
+  const filtered = excludeUser
+    ? participants.filter(p => p.user_id !== excludeUser.id)
+    : participants;
+
+  if (!filtered.length) {
+    return interaction.reply({ ...v2([container([text('❌ Нет участников для перевыбора после исключения.')])], true) });
+  }
+
   const count = winnerCount ?? gData.winner_count;
-  const actualCount = Math.min(count, participants.length);
-  const shuffled = [...participants].sort(() => Math.random() - 0.5);
+  const actualCount = Math.min(count, filtered.length);
+  const shuffled = [...filtered].sort(() => Math.random() - 0.5);
   const winners = shuffled.slice(0, actualCount).map(p => p.user_id);
 
   try {
@@ -52,10 +62,11 @@ async function execute(client, interaction) {
     }
 
     const winStr = winners.map(w => `<@${w}>`).join(', ');
+    const excludeStr = excludeUser ? ` (исключён: <@${excludeUser.id}>)` : '';
     await interaction.reply({
       flags: IS_V2,
       components: [container([
-        text(`🎉 Реролл розыгрыша **${gData.item}** (#${gId})\nНовый победитель${winners.length > 1 ? 'и' : ''}: ${winStr}`),
+        text(`🎉 Реролл розыгрыша **${gData.item}** (#${gId})${excludeStr}\nНовый победитель${winners.length > 1 ? 'и' : ''}: ${winStr}`),
       ])],
     });
   } catch (e) {
