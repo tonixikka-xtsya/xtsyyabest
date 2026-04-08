@@ -49,7 +49,7 @@ function buildGiveawayComponents(gData, participantCount, ended = false, winners
   items.push(separator());
   items.push(actionRow([
     button(`giveaway_join_${gData.id}`, {
-      emoji: customEmoji('1491443989402882088', 'pribitsya'),
+      emoji: customEmoji('1491443989402882088', 'giveaway'),
       style: 1,
       disabled: ended,
     }),
