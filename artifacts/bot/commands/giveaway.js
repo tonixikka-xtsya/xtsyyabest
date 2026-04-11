@@ -1,3 +1,4 @@
+```js
 const { container, text, separator, mediaGallery, actionRow, button, customEmoji, v2, IS_V2 } = require('../utils/components');
 const { parseDuration } = require('../utils/duration');
 const { db } = require('../database');
@@ -83,7 +84,10 @@ function buildGiveawayComponents(gData, participantCount, ended = false, winners
     })
   );
 
-  return [container(items), actionRow(buttons)];
+  return [
+    container(items),
+    container([actionRow(buttons)]),
+  ];
 }
 
 async function execute(client, interaction) {
@@ -179,9 +183,11 @@ async function endGiveaway(client, gId) {
 
 async function handleChanceButton(interaction) {
   await interaction.reply({
-    flags: (1 << 6) | (1 << 15),
+    flags: IS_V2 | 64,
     components: [container([text(CHANCE_TEXT)])],
   });
 }
 
 module.exports = { data, execute, buildGiveawayComponents, scheduleGiveaway, endGiveaway, handleChanceButton };
+```
+      
