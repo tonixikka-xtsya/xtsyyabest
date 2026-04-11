@@ -4,6 +4,20 @@ const { db } = require('../database');
 
 const GIVEAWAY_ROLES = ['1478848229733962002', '1407804721640640542', '1429169517119934685', '1404872037624709152'];
 
+const CHANCE_TEXT = `## Шанс дропа :
+<@&1404881427245563904> — +0.05%
+<@&1404881104758112298> — +0.15%
+<@&1404880719469350945> — +0.3%
+<@&1404880308603719711> — +0.5%
+<@&1404878540775620649> — +0.6%
+<@&1404878088369606666> — +0.8%
+<@&1404877963417227346> — +0.9%
+<@&1404877497924845590> — +1.5%
+<@&1404877687201333298> — +2%
+<@&1404877101378699265> — +4%
+<@&1467063042431778869> — +5%
+<@&1467228617334587536> — +7%`;
+
 const data = {
   name: 'giveaway',
   description: 'Создать розыгрыш',
@@ -23,6 +37,10 @@ function buildGiveawayComponents(gData, participantCount, ended = false, winners
     ? winners.map(w => `<@${w}>`).join(', ')
     : '—';
 
+  const timeField = ended
+    ? `<a:grownwh:1481735043150778480> **Завершён :** <t:${endTs}:R> (<t:${endTs}:f>)`
+    : `<a:grownwh:1481735043150778480> **Закончится :** <t:${endTs}:R>`;
+
   const items = [
     text(`## Розыгрыш : ${gData.item}`),
   ];
@@ -36,18 +54,25 @@ function buildGiveawayComponents(gData, participantCount, ended = false, winners
     `<a:grownwh:1481735043150778480> **Условие :**\n\`\`\`${gData.description}\`\`\`\n` +
     `<a:grownwh:1481735043150778480> **Организатор :** <@${gData.organizer_id}> (${gData.organizer_id})\n` +
     `<a:grownwh:1481735043150778480> **${winnerLabel} :** ${winnerText}\n` +
-    `<a:grownwh:1481735043150778480> **Закончится :** <t:${endTs}:R>\n` +
+    timeField + '\n' +
     `<a:grownwh:1481735043150778480> **ID розыгрыша :** ${gData.id}`
   ));
 
   items.push(separator());
-  items.push(actionRow([
-    button(`giveaway_join_${gData.id}`, {
-      emoji: customEmoji('1492370508195299369', 'pribavlsya1'),
-      label: 'Участвовать',
-      style: 1,
-      disabled: ended,
-    }),
+
+  const buttons = [];
+
+  if (!ended) {
+    buttons.push(
+      button(`giveaway_join_${gData.id}`, {
+        emoji: customEmoji('1492370508195299369', 'pribavlsya1'),
+        label: 'Участвовать',
+        style: 1,
+      })
+    );
+  }
+
+  buttons.push(
     button(`giveaway_chance_${gData.id}`, {
       emoji: customEmoji('1492370511865577522', 'dice1'),
       label: 'Шанс выпадения',
@@ -57,8 +82,10 @@ function buildGiveawayComponents(gData, participantCount, ended = false, winners
       emoji: customEmoji('1492370510229798923', 'group1'),
       label: String(participantCount),
       style: 2,
-    }),
-  ]));
+    })
+  );
+
+  items.push(actionRow(buttons));
 
   return [container(items)];
 }
@@ -80,6 +107,8 @@ async function execute(client, interaction) {
     return interaction.reply({ ...v2([container([text('❌ Неверный формат времени. Пример: `1h`, `30m`, `2d`')])], true) });
   }
 
+  await interaction.deferReply();
+
   const now = Date.now();
   const endTime = now + duration;
   const organizerName = interaction.member.displayName;
@@ -94,7 +123,7 @@ async function execute(client, interaction) {
 
   const components = buildGiveawayComponents(gData, 0);
 
-  await interaction.reply({ flags: IS_V2, components });
+  await interaction.editReply({ flags: IS_V2, components });
   const msg = await interaction.fetchReply();
 
   db.prepare('UPDATE giveaways SET message_id = ? WHERE id = ?').run(msg.id, gId);
@@ -152,4 +181,18 @@ async function endGiveaway(client, gId) {
   } catch {}
 }
 
-module.exports = { data, execute, buildGiveawayComponents, scheduleGiveaway, endGiveaway };
+// Обработчик кнопки "Шанс выпадения"
+async function handleChanceButton(interaction) {
+  await interaction.reply({
+    ...v2([container([text(CHANCE_TEXT)])], true),
+  });
+}
+
+module.exports = { data, execute, buildGiveawayComponents, scheduleGiveaway, endGiveaway, handleChanceButton };
+И в файле где обрабатываются кнопки (interactionCreate) добавь:
+const { handleChanceButton } = require('../commands/giveaway');
+
+// внутри обработчика кнопок:
+if (interaction.customId.startsWith('giveaway_chance_')) {
+  return handleChanceButton(interaction);
+}
