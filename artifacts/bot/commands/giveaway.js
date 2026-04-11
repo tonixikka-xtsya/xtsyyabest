@@ -1,4 +1,3 @@
-```js
 const { container, text, separator, mediaGallery, actionRow, button, customEmoji, v2, IS_V2 } = require('../utils/components');
 const { parseDuration } = require('../utils/duration');
 const { db } = require('../database');
@@ -189,5 +188,3 @@ async function handleChanceButton(interaction) {
 }
 
 module.exports = { data, execute, buildGiveawayComponents, scheduleGiveaway, endGiveaway, handleChanceButton };
-```
-      

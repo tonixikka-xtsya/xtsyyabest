@@ -20,18 +20,15 @@ const commandMap = {};
 for (const cmd of slashCommands) commandMap[cmd.data.name] = cmd;
 
 async function handleInteraction(client, interaction) {
-  // Slash commands
   if (interaction.isChatInputCommand()) {
     const cmd = commandMap[interaction.commandName];
     if (cmd) await cmd.execute(client, interaction).catch(console.error);
     return;
   }
 
-  // Button interactions
   if (interaction.isButton()) {
     const { customId } = interaction;
 
-    // Leaderboard navigation: lb_<action>_<userId>_<page>
     if (customId.startsWith('lb_')) {
       const parts = customId.split('_');
       const action = parts[1];
@@ -43,19 +40,15 @@ async function handleInteraction(client, interaction) {
       }
 
       await interaction.deferUpdate();
-
       const delta = { dback: -3, back: -1, next: 1, dnext: 3 }[action] ?? 0;
       const newPage = currentPage + delta;
-
       await interaction.guild.members.fetch().catch(() => {});
       const { items, totalPages, safePage } = await buildLbPage(interaction.guild, newPage);
       const components = buildLbComponents(callerId, items, safePage, totalPages);
-
       await interaction.message.edit({ flags: IS_V2, components });
       return;
     }
 
-    // Msgcount navigation: mc_<action>_<userId>_<page>
     if (customId.startsWith('mc_')) {
       const parts = customId.split('_');
       const action = parts[1];
@@ -67,19 +60,15 @@ async function handleInteraction(client, interaction) {
       }
 
       await interaction.deferUpdate();
-
       const delta = { dback: -3, back: -1, next: 1, dnext: 3 }[action] ?? 0;
       const newPage = currentPage + delta;
-
       await interaction.guild.members.fetch().catch(() => {});
       const { items, totalPages, safePage } = await buildMsgPage(interaction.guild, newPage);
       const components = buildMsgComponents(callerId, items, safePage, totalPages);
-
       await interaction.message.edit({ flags: IS_V2, components });
       return;
     }
 
-    // Love leaderboard navigation: lovelb_<action>_<userId>_<page>
     if (customId.startsWith('lovelb_')) {
       const parts = customId.split('_');
       const action = parts[1];
@@ -91,22 +80,17 @@ async function handleInteraction(client, interaction) {
       }
 
       await interaction.deferUpdate();
-
       const delta = { dback: -3, back: -1, next: 1, dnext: 3 }[action] ?? 0;
       const newPage = currentPage + delta;
-
       await interaction.guild.members.fetch().catch(() => {});
       const { items, totalPages, safePage } = await buildLoveLbPage(interaction.guild, newPage);
       const components = buildLoveLbComponents(callerId, items, safePage, totalPages);
-
       await interaction.message.edit({ flags: IS_V2, components });
       return;
     }
 
-    // Giveaway join: giveaway_join_<id>
     if (customId.startsWith('giveaway_join_')) {
       await interaction.deferUpdate();
-
       const gId = parseInt(customId.split('_')[2]);
       const gData = db.prepare('SELECT * FROM giveaways WHERE id = ?').get(gId);
 
@@ -120,16 +104,12 @@ async function handleInteraction(client, interaction) {
       if (existing) {
         db.prepare('DELETE FROM giveaway_participants WHERE giveaway_id = ? AND user_id = ?').run(gId, interaction.user.id);
         await interaction.followUp({
-          ...v2([container([
-            text('### Регистрация отменена\n-# Вы вышли из розыгрыша. Нажмите кнопку снова, чтобы участвовать.'),
-          ])], true),
+          ...v2([container([text('### Регистрация отменена\n-# Вы вышли из розыгрыша. Нажмите кнопку снова, чтобы участвовать.')])], true),
         });
       } else {
         db.prepare('INSERT OR IGNORE INTO giveaway_participants (giveaway_id, user_id) VALUES (?, ?)').run(gId, interaction.user.id);
         await interaction.followUp({
-          ...v2([container([
-            text('### Вы успешно зарегистрировались на розыгрыш!!!\n-# Чтобы отменить регистрацию, кликните на кнопку повторно'),
-          ])], true),
+          ...v2([container([text('### Вы успешно зарегистрировались на розыгрыш!!!\n-# Чтобы отменить регистрацию, кликните на кнопку повторно')])], true),
         });
       }
 
@@ -140,16 +120,13 @@ async function handleInteraction(client, interaction) {
       return;
     }
 
-    // Giveaway chance: giveaway_chance_<id>
     if (customId.startsWith('giveaway_chance_')) {
       await handleChanceButton(interaction);
       return;
     }
 
-    // Giveaway members: giveaway_members_<id>
     if (customId.startsWith('giveaway_members_')) {
       await interaction.deferUpdate();
-
       const gId = parseInt(customId.split('_')[2]);
       const participants = db.prepare('SELECT user_id FROM giveaway_participants WHERE giveaway_id = ?').all(gId);
 
@@ -160,14 +137,11 @@ async function handleInteraction(client, interaction) {
 
       const lines = participants.map((p, i) => `${i + 1}. <@${p.user_id}>`).join('\n');
       await interaction.followUp({
-        ...v2([container([
-          text(`### Участники розыгрыша (${participants.length})\n${lines}`),
-        ])], true),
+        ...v2([container([text(`### Участники розыгрыша (${participants.length})\n${lines}`)])], true),
       });
       return;
     }
 
-    // Marriage proposal: marry_accept_<proposerId>_<targetId> / marry_reject_<...>
     if (customId.startsWith('marry_accept_') || customId.startsWith('marry_reject_')) {
       const parts = customId.split('_');
       const isAccept = parts[1] === 'accept';
@@ -182,9 +156,7 @@ async function handleInteraction(client, interaction) {
         await interaction.deferUpdate();
         await interaction.message.edit({
           flags: IS_V2,
-          components: [container([
-            text(`💔 <@${targetId}> отклонил предложение <@${proposerId}>.`),
-          ])],
+          components: [container([text(`💔 <@${targetId}> отклонил предложение <@${proposerId}>.`)])],
         }).catch(() => {});
         return;
       }
@@ -212,14 +184,11 @@ async function handleInteraction(client, interaction) {
       await interaction.deferUpdate();
       await interaction.message.edit({
         flags: IS_V2,
-        components: [container([
-          text(`💕 **<@${proposerId}> и <@${targetId}> теперь в браке!** *Поздравляем молодожёнов!*`),
-        ])],
+        components: [container([text(`💕 **<@${proposerId}> и <@${targetId}> теперь в браке!** *Поздравляем молодожёнов!*`)])],
       }).catch(() => {});
       return;
     }
 
-    // Child adoption: child_accept_<marriageId>_<childId>_<role> / child_reject_<...>
     if (customId.startsWith('child_accept_') || customId.startsWith('child_reject_')) {
       const parts = customId.split('_');
       const isAccept = parts[1] === 'accept';
@@ -250,19 +219,15 @@ async function handleInteraction(client, interaction) {
       }
 
       addChild(marriageId, childId, interaction.guild.id, role);
-
       const roleWord = role === 'son' ? 'сын' : 'дочь';
       await interaction.deferUpdate();
       await interaction.message.edit({
         flags: IS_V2,
-        components: [container([
-          text(`✅ <@${childId}> принял(а) предложение и стал(а) ${roleWord === 'сын' ? '**сыном**' : '**дочерью**'} пары <@${marriage.user1_id}> + <@${marriage.user2_id}>!`),
-        ])],
+        components: [container([text(`✅ <@${childId}> принял(а) предложение и стал(а) ${roleWord === 'сын' ? '**сыном**' : '**дочерью**'} пары <@${marriage.user1_id}> + <@${marriage.user2_id}>!`)])],
       }).catch(() => {});
       return;
     }
 
-    // Card reply button: card_reply_<senderId>_<recipientId>
     if (customId.startsWith('card_reply_')) {
       const parts = customId.split('_');
       const senderId = parts[2];
@@ -291,7 +256,6 @@ async function handleInteraction(client, interaction) {
       return;
     }
 
-    // Moderation buttons: mod_reason_<id>, mod_time_<id>, mod_remove_<id>
     if (customId.startsWith('mod_reason_') || customId.startsWith('mod_time_') || customId.startsWith('mod_remove_')) {
       const parts = customId.split('_');
       const action = parts[1];
@@ -353,7 +317,6 @@ async function handleInteraction(client, interaction) {
     }
   }
 
-  // Modal submits
   if (interaction.isModalSubmit()) {
     const { customId } = interaction;
 
