@@ -58,8 +58,6 @@ function buildGiveawayComponents(gData, participantCount, ended = false, winners
     `<a:grownwh:1481735043150778480> **ID розыгрыша :** ${gData.id}`
   ));
 
-  items.push(separator());
-
   const buttons = [];
 
   if (!ended) {
@@ -85,9 +83,7 @@ function buildGiveawayComponents(gData, participantCount, ended = false, winners
     })
   );
 
-  items.push(actionRow(buttons));
-
-  return [container(items)];
+  return [container(items), actionRow(buttons)];
 }
 
 async function execute(client, interaction) {
@@ -181,18 +177,11 @@ async function endGiveaway(client, gId) {
   } catch {}
 }
 
-// Обработчик кнопки "Шанс выпадения"
 async function handleChanceButton(interaction) {
   await interaction.reply({
-    ...v2([container([text(CHANCE_TEXT)])], true),
+    flags: (1 << 6) | (1 << 15),
+    components: [container([text(CHANCE_TEXT)])],
   });
 }
 
 module.exports = { data, execute, buildGiveawayComponents, scheduleGiveaway, endGiveaway, handleChanceButton };
-И в файле где обрабатываются кнопки (interactionCreate) добавь:
-const { handleChanceButton } = require('../commands/giveaway');
-
-// внутри обработчика кнопок:
-if (interaction.customId.startsWith('giveaway_chance_')) {
-  return handleChanceButton(interaction);
-}

@@ -5,7 +5,7 @@ const { buildLogComponents, buildDmComponents } = require('../prefix/mute');
 const { buildBanLogComponents, buildBanDmComponents } = require('../prefix/ban');
 const { PUNISHMENT_ROLE } = require('../utils/hierarchy');
 const { buildLbPage, navButtons, buildComponents: buildLbComponents } = require('../prefix/lb');
-const { buildGiveawayComponents } = require('../commands/giveaway');
+const { buildGiveawayComponents, handleChanceButton } = require('../commands/giveaway');
 const { buildMsgPage, buildMsgComponents } = require('../commands/msgcount');
 const { buildLoveLbPage, buildLoveLbComponents } = require('../prefix/lovelb');
 
@@ -140,6 +140,12 @@ async function handleInteraction(client, interaction) {
       return;
     }
 
+    // Giveaway chance: giveaway_chance_<id>
+    if (customId.startsWith('giveaway_chance_')) {
+      await handleChanceButton(interaction);
+      return;
+    }
+
     // Giveaway members: giveaway_members_<id>
     if (customId.startsWith('giveaway_members_')) {
       await interaction.deferUpdate();
@@ -183,7 +189,6 @@ async function handleInteraction(client, interaction) {
         return;
       }
 
-      // Check both are still not married
       const existingA = getMarriage(interaction.guild.id, proposerId);
       const existingB = getMarriage(interaction.guild.id, targetId);
       if (existingA || existingB) {
@@ -198,7 +203,6 @@ async function handleInteraction(client, interaction) {
         married_at: Date.now(),
       });
 
-      // Assign love level 1 role to both
       const loveRole1 = LOVE_ROLES[1];
       for (const uid of [proposerId, targetId]) {
         const m = interaction.guild.members.cache.get(uid) || await interaction.guild.members.fetch(uid).catch(() => null);
@@ -221,7 +225,7 @@ async function handleInteraction(client, interaction) {
       const isAccept = parts[1] === 'accept';
       const marriageIdStr = parts[2];
       const childId = parts[3];
-      const role = parts[4]; // 'son' or 'daughter'
+      const role = parts[4];
 
       if (interaction.user.id !== childId) {
         return interaction.reply({ ...v2([container([text('❌ Только адресат предложения может принять или отклонить его.')])], true) });
