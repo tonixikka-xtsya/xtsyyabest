@@ -17,11 +17,10 @@ const data = {
 };
 
 function buildGiveawayComponents(gData, participantCount, ended = false, winners = []) {
-  const startTs = Math.floor(gData.start_time / 1000);
   const endTs = Math.floor(gData.end_time / 1000);
   const winnerLabel = gData.winner_count > 1 ? 'Победители' : 'Победитель';
   const winnerText = ended && winners.length
-    ? winners.map(w => `<@${w}> (${w})`).join(', ')
+    ? winners.map(w => `<@${w}>`).join(', ')
     : '—';
 
   const items = [
@@ -35,26 +34,27 @@ function buildGiveawayComponents(gData, participantCount, ended = false, winners
   items.push(separator());
   items.push(text(
     `<a:grownwh:1481735043150778480> **Условие :**\n\`\`\`${gData.description}\`\`\`\n` +
-    `<a:grownwh:1481735043150778480> **Организатор :** <@${gData.organizer_id}> (${gData.organizer_name})\n` +
+    `<a:grownwh:1481735043150778480> **Организатор :** <@${gData.organizer_id}> (${gData.organizer_id})\n` +
     `<a:grownwh:1481735043150778480> **${winnerLabel} :** ${winnerText}\n` +
-    `<a:grownwh:1481735043150778480> **Запущен :** <t:${startTs}:D> <t:${startTs}:T>\n` +
-    `<a:grownwh:1481735043150778480> **Закончится :** <t:${endTs}:D> <t:${endTs}:T>` +
-    (ended ? `\n<a:grownwh:1481735043150778480> **Закончился :** <t:${endTs}:R>` : '')
+    `<a:grownwh:1481735043150778480> **Закончится :** <t:${endTs}:R>\n` +
+    `<a:grownwh:1481735043150778480> **ID розыгрыша :** ${gData.id}`
   ));
-
-  if (gData.image_url) {
-    items.push(mediaGallery([gData.image_url]));
-  }
 
   items.push(separator());
   items.push(actionRow([
     button(`giveaway_join_${gData.id}`, {
-      emoji: customEmoji('1491443989402882088', 'giveaway'),
+      emoji: customEmoji('1492370508195299369', 'pribavlsya1'),
+      label: 'Участвовать',
       style: 1,
       disabled: ended,
     }),
+    button(`giveaway_chance_${gData.id}`, {
+      emoji: customEmoji('1492370511865577522', 'dice1'),
+      label: 'Шанс выпадения',
+      style: 2,
+    }),
     button(`giveaway_members_${gData.id}`, {
-      emoji: customEmoji('1491445342791532715', 'members'),
+      emoji: customEmoji('1492370510229798923', 'group1'),
       label: String(participantCount),
       style: 2,
     }),
@@ -99,7 +99,6 @@ async function execute(client, interaction) {
 
   db.prepare('UPDATE giveaways SET message_id = ? WHERE id = ?').run(msg.id, gId);
 
-  // Schedule end
   scheduleGiveaway(client, gId, duration);
 }
 
@@ -136,13 +135,20 @@ async function endGiveaway(client, gId) {
     const components = buildGiveawayComponents(gData, count, true, winners);
     await msg.edit({ flags: IS_V2, components });
 
-    if (winners.length) {
-      const winStr = winners.map(w => `<@${w}>`).join(', ');
-      await channel.send({
-        flags: IS_V2,
-        components: [container([text(`🎉 Розыгрыш **${gData.item}** завершён!\nПобедител${winners.length > 1 ? 'и' : 'ь'}: ${winStr}`)])],
-      });
-    }
+    const winnerMentions = winners.map(w => `<@${w}>`).join('\n');
+    const endComponents = [
+      container([
+        text(`## Розыгрыш завершён!\n> **Победител${winners.length > 1 ? 'и' : 'ь'} :**\n${winnerMentions || 'Нет участников'}`),
+        separator(),
+        text(`<a:grownwh:1481735043150778480> *Напиши спонсору в лс чтобы забрать приз.*`),
+      ]),
+    ];
+
+    await channel.send({
+      flags: IS_V2,
+      components: endComponents,
+      reply: { messageReference: msg.id },
+    });
   } catch {}
 }
 
